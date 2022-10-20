@@ -7,7 +7,10 @@ require (
 	google.golang.org/grpc v1.50.0
 )
 
-require github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
+require (
+	github.com/gorilla/mux v1.8.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
+)
 
 require (
 	github.com/Boutit/user v0.0.0-20221009192730-1218c9e757f6
