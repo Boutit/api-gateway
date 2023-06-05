@@ -12,7 +12,8 @@ import (
 
 	"github.com/Boutit/api-gateway/internal/config"
 	"github.com/Boutit/api-gateway/pkg/middleware"
-	userService "github.com/Boutit/user/api"
+	authService "github.com/Boutit/auth/api/protos/boutit/auth"
+	userService "github.com/Boutit/user/api/protos/boutit/user"
 	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/cors"
@@ -60,9 +61,9 @@ func main() {
 
 	defer cancel()
 
-	// Create client connection to GRPC server
+	// Create client connection to GRPC servers
 	// GRPC server must be running at url specified in config
-	conn, err := grpc.DialContext(
+	userConn, err := grpc.DialContext(
 		ctx,
 		cfg.AppConfig.UserServiceUrl,
 		grpc.WithBlock(),
@@ -73,25 +74,45 @@ func main() {
 		log.Fatalln("Failed to connect to user service with err:", err)
 	}
 
+	authConn, err := grpc.DialContext(
+		ctx,
+		cfg.AppConfig.AuthServiceUrl,
+		grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	
+	if err != nil {
+		log.Fatalln("Failed to connect to auth service with err:", err)
+	}
+
 	// Create a multiplexer to match http requests to patterns and invoke corresponding handlers
 	gwmux := runtime.NewServeMux()
 
-	// Register the user service handlers with the the multiplexer and user service client connection
-	err = userService.RegisterUserServiceHandler(context.Background(), gwmux, conn)
+	// Register service handlers with the the multiplexer and client connections
+	err = userService.RegisterUserServiceHandler(context.Background(), gwmux, userConn)
 	
 	if err != nil {
 		log.Fatalln("Failed to register user service handlers with err:", err)
 	}
 
+	err = authService.RegisterAuthServiceHandler(context.Background(), gwmux, authConn)
+
+	if err != nil {
+		log.Fatalln("Failed to register auth service handlers with err:", err)
+	}
+
 	r := mux.NewRouter()
 
-	/* Handlers */
+	/* Middleware handlers */
 	userServiceHandler := middleware.CreateHandler([]middleware.Middleware{
 		middleware.AuthenticateToken(),
 	}, gwmux)
 
+	authServiceHandler := middleware.CreateHandler([]middleware.Middleware{
+		middleware.AuthenticateToken(),
+	}, gwmux)
+
 	/* Reverse Proxy for GraphQL path */
-	fmt.Println("before")
 	rp := &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			r.URL.Scheme = cfg.GraphQLConfig.Scheme
@@ -100,8 +121,6 @@ func main() {
 		},
 	}
 
-	fmt.Println("after")
-
 	graphQLHandler := middleware.CreateHandler([]middleware.Middleware{
 		middleware.AuthenticateToken(),
 	}, rp)
@@ -109,6 +128,7 @@ func main() {
 
 	/* Routes */
 	r.PathPrefix("/v1/user").Handler(userServiceHandler)
+	r.PathPrefix("/v1/auth").Handler(authServiceHandler)
 	r.PathPrefix("/graphql").Handler(graphQLHandler)
 	
 	r.Use(cors.New(cors.Options{
