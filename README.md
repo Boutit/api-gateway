@@ -1,4 +1,4 @@
-# User service
+# Api Gateway
 
 ## Run
 
@@ -12,4 +12,8 @@ make run.local
 
 ###### User Service
 
-curl -X POST -k http://localhost:8090/v1/user -d '{"user": {"username": "fatboy_slim"}}'
+curl -X POST -k http://localhost:8090/v1/signup -d '{"email_or_phone": "6472289484"}'
+
+###### Auth Service
+
+curl -X POST -k http://localhost:8090/v1/auth/create_token -d '{"userId": "ey295-asdgjsg-asdgljkas-33dll", "roles": []}'
